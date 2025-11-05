@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>myGame</title>
+	<link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="home">
+			<h1>Gioco Multiplayer</h1>
+
+		  <div class="form-container">	
+			<button id="createBtn">Crea Stanza</button>
+			<input id="roomInput" placeholder="Room ID" />
+			<button id="joinBtn">Join Room</button>
+		  </div>
+		  
+		  <p id="error"></p>
+
+	</div>
+	
+	<div id="waiting-screen">
+		<h3>In attesa del secondo giocatore</h3>
+		  <div class="loader"></div>
+		  <div class="waiting-screen-container">	
+			<p id="status"></p>
+		  </div>
+	</div>
+	
+    <div id="app"></div>
+    <script type="module" src="/src/game/main.js"></script>
+	<script type="module" src="/src/home/home.js"></script>
+  </body>
+</html>
