@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  api:
+    build: ./server
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/snowballz
+    depends_on:
+      - mongodb
+    networks:
+      - snowballz-network
+
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - snowballz-network
+
+  client:
+    build: ./client
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    networks:
+      - snowballz-network
+
+networks:
+  snowballz-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
