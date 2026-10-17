@@ -348,9 +348,13 @@ export class Game {
   private updateCamera(dt: number) {
     const aspect = this.camera.aspect
     const zoom = aspect < 1 ? 1 + (1 - aspect) * 0.6 : 1
-    const edge = HALF - 8
-    const tx = THREE.MathUtils.clamp(this.player.x, -edge, edge)
-    const tz = THREE.MathUtils.clamp(this.player.z, -edge, edge)
+    // Segue il giocatore senza inquadrare troppo vuoto oltre il bordo dell'arena.
+    const halfH = Math.hypot(30, 15) * zoom * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))
+    const halfW = halfH * aspect
+    const ex = Math.max(0, HALF + 1 - halfW)
+    const ez = Math.max(0, HALF + 1 - halfH)
+    const tx = THREE.MathUtils.clamp(this.player.x, -ex, ex)
+    const tz = THREE.MathUtils.clamp(this.player.z, -ez, ez)
     const k = 1 - Math.exp(-dt * 6)
     const target = new THREE.Vector3(tx, 30 * zoom, tz + 15 * zoom)
     this.camera.position.lerp(target, k)

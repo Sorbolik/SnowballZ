@@ -23,5 +23,5 @@ export default defineConfig({
   },
   // Il portfolio in locale carica il modulo da qui (npm run build && npm run preview).
   preview: { port: 4174, cors: true },
-  server: { port: 5174, cors: true },
+  server: { port: 5175, cors: true },
 })

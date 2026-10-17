@@ -38,14 +38,13 @@ const css = /* css */ `
   font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
   background: var(--sbz-ink); padding: 4px 10px; border-radius: 999px;
 }
-.pips { display: flex; gap: 4px; }
+.pips { display: flex; gap: 5px; background: var(--sbz-ink); padding: 6px 9px; border-radius: 999px; }
 .pip {
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--sbz-red); box-shadow: 0 0 0 2px var(--sbz-ink);
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--sbz-red);
   transition: transform 200ms ease, opacity 200ms ease;
 }
-.pip { box-shadow: 0 0 0 2px var(--sbz-cream); }
-.pip.bot { background: var(--sbz-ink-2); }
+.pip.bot { background: var(--sbz-cream); }
 .pip.lost { opacity: 0.25; transform: scale(0.7); }
 .overlay {
   position: absolute; inset: 0;

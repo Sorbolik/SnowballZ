@@ -38,7 +38,7 @@ container.append(document.createElement('snowballz-demo'))
 
 ```bash
 npm install
-npm run dev       # pagina standalone su http://localhost:5174
+npm run dev       # pagina standalone su http://localhost:5175
 npm run build     # dist/ (index.html standalone + snowballz.js)
 npm run preview   # serve dist/ su http://localhost:4174, con CORS, per provarlo dentro il portfolio
 ```
