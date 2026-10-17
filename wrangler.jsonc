@@ -1,0 +1,10 @@
+// Deploy su Cloudflare Workers come sito statico (nessun codice server).
+// Cloudflare esegue `npm run build` e poi `npx wrangler deploy`, che pubblica dist/.
+// CORS e cache arrivano da dist/_headers (copiato da public/_headers).
+{
+  "name": "snowballz",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
