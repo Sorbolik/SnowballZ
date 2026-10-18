@@ -56,7 +56,8 @@ export class Input {
   }
 
   private onKeyDown(e: KeyboardEvent) {
-    if ((e.composedPath()[0] as HTMLElement).tagName === 'BUTTON') return
+    const tag = (e.composedPath()[0] as HTMLElement).tagName
+    if (tag === 'BUTTON' || tag === 'INPUT') return
     if (e.code in MOVE_KEYS || e.code === 'Space') e.preventDefault()
     if (e.code === 'Space') this.spaceDown = true
     this.keys.add(e.code)

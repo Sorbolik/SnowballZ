@@ -12,7 +12,12 @@
     </style>
   </head>
   <body>
-    <snowballz-demo></snowballz-demo>
+    <snowballz-demo menu></snowballz-demo>
+    <script>
+      // Link d'invito: /?room=CODICE entra direttamente nella stanza.
+      const room = new URLSearchParams(location.search).get('room')
+      if (room) document.querySelector('snowballz-demo').setAttribute('room', room)
+    </script>
     <script type="module" src="/src/element.ts"></script>
   </body>
 </html>

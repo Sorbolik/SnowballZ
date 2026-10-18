@@ -6,11 +6,12 @@ import {
   type Fighter, type Snowball,
 } from './entities'
 import { Input } from './input'
+import type { PeerMsg } from '../net'
 import { GameMap, GRID, HALF, TILE, rng } from './map'
 import { palette } from './palette'
 
 export type GameState = 'ready' | 'playing' | 'over'
-export type Winner = 'player' | 'bot'
+export type Winner = 'player' | 'bot' | 'opponent'
 
 export type GameEvents = {
   onLives(player: number, bot: number): void
@@ -24,6 +25,9 @@ const BOT_SPEED = 5
 const PLAYER_FIRE_INTERVAL = 0.32
 const INVULNERABLE_TIME = 1.4
 const KNOCKBACK = 0.6
+const NET_INTERVAL = 0.05 // posizione all'altro giocatore 20 volte al secondo
+
+const round = (n: number) => Math.round(n * 1000) / 1000
 
 export class Game {
   state: GameState = 'ready'
@@ -43,6 +47,11 @@ export class Game {
   private balls: Snowball[] = []
   private puffs: Puff[] = []
   private playerVel = { x: 0, z: 0 }
+
+  /** Online: l'avversario è l'altro giocatore, i messaggi passano da `send`. */
+  private send: ((m: PeerMsg) => void) | null = null
+  private remote = { x: 0, z: 0, f: 0 }
+  private netTimer = 0
 
   private input: Input
   private raf = 0
@@ -91,14 +100,16 @@ export class Game {
     this.render()
   }
 
-  /** Nuova mappa, vite piene, tutti al punto di partenza. */
-  newRound(seed = (Math.random() * 2 ** 32) >>> 0) {
+  /** Nuova mappa, vite piene, tutti al punto di partenza. Online lo slot 1 parte dall'angolo opposto. */
+  newRound(seed = (Math.random() * 2 ** 32) >>> 0, slot: 0 | 1 = 0) {
     this.rand = rng(seed ^ 0x9e3779b9)
     this.map = new GameMap(seed)
     this.bot = new Bot(this.map, this.rand)
     this.buildWorld()
 
-    for (const [f, spawn] of [[this.player, this.map.playerSpawn], [this.enemy, this.map.botSpawn]] as const) {
+    const spawns = [this.map.playerSpawn, this.map.botSpawn]
+    if (slot === 1) spawns.reverse()
+    for (const [f, spawn] of [[this.player, spawns[0]], [this.enemy, spawns[1]]] as const) {
       const c = GameMap.center(spawn)
       Object.assign(f, { x: c.x, z: c.z, lives: MAX_LIVES, invulnerable: 0, cooldown: 0.6 })
       f.facing = Math.atan2(-c.x, -c.z)
@@ -106,16 +117,51 @@ export class Game {
     }
     for (const b of this.balls) this.scene.remove(b.mesh, b.shadow)
     this.balls = []
+    this.remote = { x: this.enemy.x, z: this.enemy.z, f: this.enemy.facing }
     this.input.reset()
     this.events.onLives(MAX_LIVES, MAX_LIVES)
     this.syncMeshes()
     this.updateCamera(1)
   }
 
+  /** Partita contro il bot. */
   start() {
-    if (this.state === 'over') this.newRound()
+    if (this.state === 'over' || this.send) {
+      this.send = null
+      this.newRound()
+    }
     this.state = 'playing'
     this.resume()
+  }
+
+  /** Partita online: stessa mappa dal seed della stanza, l'avversario arriva da `receive`. */
+  startOnline(seed: number, slot: 0 | 1, send: (m: PeerMsg) => void) {
+    this.send = send
+    this.newRound(seed, slot)
+    this.state = 'playing'
+    this.resume()
+  }
+
+  /** Ferma la partita senza vincitori (l'altro giocatore è uscito). */
+  stop() {
+    this.state = 'over'
+    this.pause()
+  }
+
+  receive(m: PeerMsg) {
+    if (!this.send || this.state !== 'playing') return
+    const { enemy } = this
+    if (m.t === 's') {
+      this.remote = { x: m.x, z: m.z, f: m.f }
+    } else if (m.t === 'b') {
+      Object.assign(enemy, { x: m.x, z: m.z })
+      this.throw(enemy, m.a, 0)
+    } else if (m.t === 'hit') {
+      enemy.lives = m.lives
+      enemy.invulnerable = INVULNERABLE_TIME
+      this.events.onLives(this.player.lives, enemy.lives)
+      if (enemy.lives <= 0) this.finish(enemy)
+    }
   }
 
   /** Mette in pausa il loop (pagina nascosta o fuori dallo schermo). */
@@ -207,13 +253,8 @@ export class Game {
     }
     if (this.input.firing && player.cooldown <= 0) this.throw(player, player.facing, PLAYER_FIRE_INTERVAL)
 
-    // Bot
-    const intent = this.bot.think(dt, enemy, player, this.playerVel, this.balls)
-    const moved = this.moveFighter(enemy, intent.mx, intent.mz, dt)
-    if (!moved && (intent.mx || intent.mz)) this.bot.bump()
-    enemy.facing = intent.aim
-    enemy.cooldown -= dt
-    if (intent.fire) this.throw(enemy, intent.aim, 0)
+    if (this.send) this.updateRemote(dt)
+    else this.updateBot(dt)
 
     for (const f of [player, enemy]) f.invulnerable = Math.max(0, f.invulnerable - dt)
 
@@ -221,6 +262,31 @@ export class Game {
     this.updatePuffs(dt)
     this.syncMeshes()
     this.updateCamera(dt)
+  }
+
+  private updateBot(dt: number) {
+    const { player, enemy } = this
+    const intent = this.bot.think(dt, enemy, player, this.playerVel, this.balls)
+    const moved = this.moveFighter(enemy, intent.mx, intent.mz, dt)
+    if (!moved && (intent.mx || intent.mz)) this.bot.bump()
+    enemy.facing = intent.aim
+    enemy.cooldown -= dt
+    if (intent.fire) this.throw(enemy, intent.aim, 0)
+  }
+
+  /** L'avversario online scivola verso l'ultima posizione ricevuta; la mia parte all'altro. */
+  private updateRemote(dt: number) {
+    const { player, enemy, remote } = this
+    const k = 1 - Math.exp(-dt * 18)
+    enemy.x += (remote.x - enemy.x) * k
+    enemy.z += (remote.z - enemy.z) * k
+    enemy.facing = remote.f
+
+    this.netTimer -= dt
+    if (this.netTimer <= 0) {
+      this.netTimer = NET_INTERVAL
+      this.send?.({ t: 's', x: round(player.x), z: round(player.z), f: round(player.facing) })
+    }
   }
 
   /** Movimento con scivolamento sui muri, asse per asse. Ritorna false se bloccato del tutto. */
@@ -243,6 +309,7 @@ export class Game {
     const b = createSnowball(f, angle)
     if (this.map.isSolidAt(b.x, b.z)) return
     f.cooldown = interval
+    if (f === this.player) this.send?.({ t: 'b', x: round(f.x), z: round(f.z), a: angle })
     this.balls.push(b)
     this.scene.add(b.mesh, b.shadow)
   }
@@ -258,7 +325,8 @@ export class Game {
       let gone = false
       if (Math.hypot(target.x - b.x, target.z - b.z) < FIGHTER_RADIUS + SNOWBALL_RADIUS) {
         this.puff(b.x, 0.9, b.z, 10)
-        if (target.invulnerable <= 0) this.hit(target, b)
+        // Online ognuno decide solo dei colpi che riceve, e li comunica all'altro.
+        if (target.invulnerable <= 0 && (!this.send || target === this.player)) this.hit(target, b)
         gone = true
       } else if (this.map.isSolidAt(b.x, b.z) || b.travelled > SNOWBALL_RANGE) {
         this.puff(b.x, 0.8, b.z, 6)
@@ -284,20 +352,22 @@ export class Game {
       target.z += kz
     }
     this.events.onLives(this.player.lives, this.enemy.lives)
+    this.send?.({ t: 'hit', lives: target.lives })
+    if (target.lives <= 0) this.finish(target)
+  }
 
-    if (target.lives <= 0) {
-      target.group.visible = false
-      this.puff(target.x, 0.8, target.z, 24)
-      this.state = 'over'
-      this.input.reset()
-      const winner: Winner = target === this.enemy ? 'player' : 'bot'
-      // Lascia finire lo sbuffo prima di fermare il loop.
-      setTimeout(() => {
-        if (this.destroyed) return
-        if (this.state === 'over') this.pause()
-        this.events.onOver(winner)
-      }, 650)
-    }
+  private finish(target: Fighter) {
+    target.group.visible = false
+    this.puff(target.x, 0.8, target.z, 24)
+    this.state = 'over'
+    this.input.reset()
+    const winner: Winner = target === this.enemy ? 'player' : this.send ? 'opponent' : 'bot'
+    // Lascia finire lo sbuffo prima di fermare il loop.
+    setTimeout(() => {
+      if (this.destroyed) return
+      if (this.state === 'over') this.pause()
+      this.events.onOver(winner)
+    }, 650)
   }
 
   private puff(x: number, y: number, z: number, n: number) {
