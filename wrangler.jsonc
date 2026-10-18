@@ -1,0 +1,18 @@
+// Deploy su Cloudflare Workers: sito statico + server delle stanze online.
+// Cloudflare esegue `npm run build` e poi `npx wrangler deploy`, che pubblica dist/ e server/worker.ts.
+// CORS e cache dei file statici arrivano da dist/_headers (copiato da public/_headers).
+{
+  "name": "snowballz",
+  "main": "server/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    // Solo /api/* passa dal codice; tutto il resto sono file statici.
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  // SQLite: è il tipo di Durable Object incluso nel piano gratuito.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b2470" />
+    <title>SnowballZ</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b2470; }
+      body { font-family: system-ui, sans-serif; }
+      snowballz-demo { position: fixed; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <snowballz-demo menu></snowballz-demo>
+    <script>
+      // Link d'invito: /?room=CODICE entra direttamente nella stanza.
+      const room = new URLSearchParams(location.search).get('room')
+      if (room) document.querySelector('snowballz-demo').setAttribute('room', room)
+    </script>
+    <script type="module" src="/src/element.ts"></script>
+  </body>
+</html>
