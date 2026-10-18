@@ -2,9 +2,9 @@
 
 Battaglia a palle di neve in three.js, contro un bot.
 
-Questo branch (`single-player-demo`) è la riscrittura single-player pensata per girare come
-micro-frontend dentro il portfolio. Il multiplayer originale (Express + socket.io, stanze a 2 giocatori)
-resta su `main`.
+Questo branch (`single-player-demo`) è la riscrittura pensata per girare come micro-frontend
+dentro il portfolio: contro il bot, e (in arrivo) online in 2 con le stanze. Il multiplayer originale
+(Express + socket.io) resta su `main`.
 
 ## Come si usa
 
@@ -50,8 +50,33 @@ npm run preview   # serve dist/ su http://localhost:4174, con CORS, per provarlo
 - `src/game/bot.ts`: il bot (ti cerca con BFS sulla griglia, gira attorno, mira con errore, a volte schiva).
 - `src/game/map.ts`: mappa a griglia generata da un seed, linea di vista, percorsi.
 - `src/game/input.ts`: tastiera, mouse e joystick virtuale.
+- `server/worker.ts`: il server online (Worker + Durable Object per stanza).
+
+## Online
+
+Il server sta nello stesso Worker che serve `snowballz.js`: una stanza è un Durable Object
+che tiene i due WebSocket e inoltra all'altro giocatore i messaggi di uno. La partita la
+simulano i client; il server sceglie il seed della mappa e chi parte da quale angolo.
+
+- `POST /api/rooms` → `{ "code": "K7QWD" }` (5 caratteri, niente 0/O/1/I/L)
+- `GET /api/rooms/:code` con `Upgrade: websocket` → la stanza
+
+Messaggi dal server (JSON):
+
+- `{ t: 'hello', slot }`: sei entrato, `slot` 0 (chi crea) o 1
+- `{ t: 'start', seed, slot }`: siete in due, si parte con la mappa di quel `seed`
+- `{ t: 'left' }`: l'altro è uscito
+- `{ t: 'error', error: 'missing' | 'full' }`: codice sbagliato o stanza piena, poi chiude
+
+Dal client: qualsiasi JSON (max 1 kB) viene girato all'altro così com'è; `{"t":"again"}`
+chiede la rivincita, che riparte quando la chiedono entrambi. `ping` → `pong` per tenere
+viva la connessione. Una stanza vuota sparisce dopo un'ora.
+
+```bash
+npm run build && npx wrangler dev   # sito + server su http://localhost:8787
+```
 
 ## Deploy
 
-Sito statico su Cloudflare Workers (`wrangler.jsonc`). `public/_headers` aggiunge CORS
-(il portfolio carica il modulo da un altro dominio) e la cache.
+Cloudflare Workers (`wrangler.jsonc`): file statici da `dist/`, e `/api/*` al server.
+`public/_headers` aggiunge CORS (il portfolio carica il modulo da un altro dominio) e la cache.
